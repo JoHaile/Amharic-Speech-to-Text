@@ -1033,6 +1033,18 @@
       recState.textContent = `Done with ${doneLabel}. Clip kept — switch model and press Send to compare.`;
       recHint.textContent = "The same recording can be sent again with the other model, or record another.";
 
+      // Auto-copy the generated text so it's ready to paste.
+      const copyText = (resultText.value || "").trim();
+      if (copyText) {
+        try {
+          await navigator.clipboard.writeText(copyText);
+          showToast("Text copied to clipboard.");
+        } catch (_) {
+          try { resultText.focus(); resultText.select(); document.execCommand("copy"); showToast("Text copied to clipboard."); }
+          catch (_) { /* clipboard unavailable */ }
+        }
+      }
+
       loadHistory();
       resultCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
     } catch (err) {
