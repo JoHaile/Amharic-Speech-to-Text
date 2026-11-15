@@ -13,12 +13,12 @@
       <div class="brand-mark" aria-hidden="true">አ</div>
       <div class="brand-text">
         <h1>Amharic Speech&nbsp;to&nbsp;Text</h1>
-        <p class="brand-sub">Shook&nbsp;Tiny &middot; runs on this computer, offline</p>
+        <p class="brand-sub">Shook&nbsp;Tiny + Wav2Vec2 &middot; runs on this computer, offline</p>
       </div>
     </div>
     <div class="status" id="status">
       <span class="dot" id="statusDot"></span>
-      <span id="statusText">Checking model…</span>
+      <span id="statusText">Checking models…</span>
     </div>
   </header>
 
@@ -38,8 +38,33 @@
     <!-- ================= NEW / RECORD PANE ================= -->
     <section class="pane is-active" id="paneNew">
 
-      <div class="card recorder-card">
+      <div class="card recorder-card" id="recorderCard">
+
+        <div class="model-tabs" id="modelTabs" role="tablist" aria-label="Speech recognition model">
+          <button class="model-tab is-active" type="button" role="tab"
+                  data-model="shook" aria-selected="true">
+            <span class="model-tab-text">
+              <span class="model-tab-label">Shook Tiny</span>
+              <span class="model-tab-sub">Whisper Tiny &middot; fast</span>
+            </span>
+            <span class="model-dot" data-model-dot="shook" title="Checking model"></span>
+          </button>
+          <button class="model-tab" type="button" role="tab"
+                  data-model="wav2vec2" aria-selected="false">
+            <span class="model-tab-text">
+              <span class="model-tab-label">Wav2Vec2 XLSR</span>
+              <span class="model-tab-sub">Large CTC &middot; 1.2 GB</span>
+            </span>
+            <span class="model-dot" data-model-dot="wav2vec2" title="Checking model"></span>
+          </button>
+        </div>
+
         <p class="pane-hint" id="recHint">Press the microphone and start speaking in Amharic.</p>
+
+        <div class="wave-wrap" id="waveWrap" aria-hidden="true">
+          <canvas class="wave-canvas" id="waveCanvas" width="640" height="96"></canvas>
+          <div class="wave-caption" id="waveCaption">Your voice will appear here</div>
+        </div>
 
         <div class="rec-wrap">
           <button class="rec-btn" id="recBtn" aria-label="Start recording">
@@ -83,7 +108,10 @@
       <div class="card result-card" id="resultCard" hidden>
         <div class="result-head">
           <h2>Transcription</h2>
-          <button class="btn btn-ghost btn-sm" id="copyBtn">Copy</button>
+          <div class="result-actions">
+            <span class="model-badge" id="resultModel" hidden></span>
+            <button class="btn btn-ghost btn-sm" id="copyBtn">Copy</button>
+          </div>
         </div>
         <p class="result-text" id="resultText"></p>
         <div class="result-meta" id="resultMeta"></div>
@@ -95,7 +123,14 @@
     <section class="pane" id="paneHistory">
       <div class="history-head">
         <h2 class="history-title">Your transcriptions</h2>
-        <button class="btn btn-ghost btn-sm" id="clearAllBtn" hidden>Clear all</button>
+        <div class="history-tools">
+          <div class="history-filter" id="historyFilter" role="tablist" aria-label="Filter history by model">
+            <button class="filter-chip is-active" type="button" data-filter="all" role="tab" aria-selected="true">All</button>
+            <button class="filter-chip" type="button" data-filter="shook" role="tab" aria-selected="false">Shook</button>
+            <button class="filter-chip" type="button" data-filter="wav2vec2" role="tab" aria-selected="false">Wav2Vec2</button>
+          </div>
+          <button class="btn btn-ghost btn-sm" id="clearAllBtn" hidden>Clear all</button>
+        </div>
       </div>
 
       <div class="empty" id="historyEmpty">

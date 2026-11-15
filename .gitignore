@@ -1,5 +1,5 @@
 # --- Model weights: never commit these (146 MB) ---
-models/
+models/*
 !models/.gitkeep
 
 # --- Python virtual environment ---

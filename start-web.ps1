@@ -8,9 +8,8 @@
 
 $ErrorActionPreference = "Stop"
 
-$Root      = Split-Path -Parent $MyInvocation.MyCommand.Path
-$VenvPy    = Join-Path $Root ".venv\Scripts\python.exe"
-$ModelFile = Join-Path $Root "models\shook-tiny-stage2\model.safetensors"
+$Root   = Split-Path -Parent $MyInvocation.MyCommand.Path
+$VenvPy = Join-Path $Root ".venv\Scripts\python.exe"
 
 Set-Location $Root
 
@@ -20,8 +19,15 @@ if (-not (Test-Path $VenvPy)) {
     exit 1
 }
 
-if (-not (Test-Path $ModelFile)) {
-    Write-Host "The model is missing from models\shook-tiny-stage2." -ForegroundColor Red
+$Missing = @()
+foreach ($ModelDir in @("shook-tiny-stage2", "wav2vec2-large-xlsr-53-amharic")) {
+    $ModelFile = Join-Path $Root "models\$ModelDir\model.safetensors"
+    if (-not (Test-Path $ModelFile)) { $Missing += $ModelDir }
+}
+
+if ($Missing.Count -gt 0) {
+    Write-Host "These models are missing from .\models\:" -ForegroundColor Red
+    foreach ($Name in $Missing) { Write-Host "  - $Name" }
     Write-Host "Run this first:  powershell -ExecutionPolicy Bypass -File .\setup.ps1"
     exit 1
 }

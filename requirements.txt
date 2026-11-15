@@ -1,4 +1,5 @@
-# Shook Tiny Amharic ASR - dependencies
+# Amharic Speech-to-Text - dependencies for both models
+# (Shook Tiny Whisper + Wav2Vec2 XLSR)
 #
 # IMPORTANT: PyTorch must be the CPU-only build. Install it from the PyTorch CPU
 # index FIRST, otherwise pip may pull the CUDA wheel (hundreds of MB) which this

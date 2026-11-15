@@ -1,75 +1,45 @@
-# Amharic Speech-to-Text (Shook Tiny) — offline, CPU-only
+# Amharic Speech-to-Text — two offline models, one web app
 
-Local Amharic speech recognition using **[b1n1yam/shook-tiny-amharic-stage2-polish](https://huggingface.co/b1n1yam/shook-tiny-amharic-stage2-polish)**.
+Local Amharic speech recognition with **two interchangeable models**, a live
+microphone waveform, and a history of every transcription.
 
-Give it an Amharic audio recording, get Amharic text. Everything runs on your CPU, with no internet connection, no GPU, no CUDA and no cloud API.
+Everything runs on this computer: **CPU only, no GPU, no CUDA, no cloud API, no
+internet connection during inference**.
 
 ---
 
-## Model
+## Models
 
-| | |
-|---|---|
-| Repository | `b1n1yam/shook-tiny-amharic-stage2-polish` |
-| Architecture | Whisper Tiny, fine-tuned for Amharic |
-| Parameters | 37.8 million (4 encoder / 4 decoder layers, d_model 384) |
-| Format | Safetensors, FP32 |
-| License | Apache 2.0 |
-| Reported eval WER | 20.7634 % (as published by the model author) |
-| Sample rate | 16 kHz |
-| Window | 30 s per chunk (480 000 samples) |
+| Tab | Hugging Face model | Architecture | Parameters | Local size |
+|---|---|---|---|---|
+| **Shook Tiny** | [`b1n1yam/shook-tiny-amharic-stage2-polish`](https://huggingface.co/b1n1yam/shook-tiny-amharic-stage2-polish) | Whisper Tiny fine-tuned for Amharic | 37.8M | 146 MB |
+| **Wav2Vec2 XLSR** | [`agkphysics/wav2vec2-large-xlsr-53-amharic`](https://huggingface.co/agkphysics/wav2vec2-large-xlsr-53-amharic) | Wav2Vec2-Large-XLSR-53 CTC | 315.7M | 1.2 GB |
 
-This is the exact checkpoint named in the task. No other model is substituted.
+Both are public, Apache-2.0-compatible checkpoints downloaded anonymously — no
+Hugging Face token, login, API key or paid service is used.
+
+**Shook Tiny** is the fast, compact default. It produces normally spaced Amharic
+text. The model card reports **20.7634 % WER** on its evaluation set.
+
+**Wav2Vec2 XLSR** is the larger alternative. Its model card reports **26 % WER /
+7 % CER** on the ALFFA validation set. That model was trained on
+morpheme-segmented transcripts, so its output contains spaces inside words
+(for example `ማእከሎ ችን` instead of `ማእከሎችን`). This is expected behaviour, not a
+decoding bug.
+
+The two models are different checkpoints, not different copies of the same
+model. Choose the tab that gives the better result for your recording.
 
 ---
 
 ## Quick start
 
-Already set up on this machine — just run:
+The virtual environment and both models are already set up in this folder.
+
+### Web interface (recommended)
 
 ```powershell
 cd "C:\Users\JO\Documents\Opencode Desktop\STT Amharic Shook Tiny"
-.\.venv\Scripts\python.exe transcribe.py "audio\your_file.wav"
-```
-
-Or activate the environment first, then use plain `python`:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-python transcribe.py "audio\your_file.wav"
-```
-
-### Interactive mode
-
-Keeps the model in memory so you can transcribe file after file without restarting:
-
-```powershell
-python transcribe.py
-```
-
-```text
-audio> audio\meeting.m4a
-...
-audio> audio\interview.flac
-...
-audio> q
-```
-
-### Options
-
-| Flag | Meaning |
-|---|---|
-| `-o, --output PATH` | Write the transcript somewhere other than `output\<name>.txt` |
-| `-i, --interactive` | Force interactive mode |
-| `--json` | Also print the metrics as JSON |
-
----
-
-## Web interface (recommended)
-
-Prefer a page over the terminal? Start the local web UI:
-
-```powershell
 powershell -ExecutionPolicy Bypass -File .\start-web.ps1
 ```
 
@@ -79,33 +49,97 @@ or directly:
 .\.venv\Scripts\python.exe app.py
 ```
 
-It loads the model once, prints a link and opens your browser automatically:
+It preloads Shook Tiny, prints a link and opens your browser automatically:
 
 ```text
-  >>>  Open this in your browser:  http://127.0.0.1:5000
+>>>  Open this in your browser:  http://127.0.0.1:5000
 ```
 
-### What you get
+Wav2Vec2 XLSR is loaded the first time you select its tab or send audio with it.
 
-**New recording tab** — press the big microphone button, speak Amharic, press it again to
-stop. Listen back, then press **Send**. The transcription appears in a large readable
-Amharic card with copy-to-clipboard and quick stats.
+### Command line
 
-No microphone? Drop an audio file onto the box at the bottom, or click to browse.
+```powershell
+# Default model (Shook Tiny)
+.\.venv\Scripts\python.exe transcribe.py "audio\sample1.flac"
 
-**History tab** — every past transcription, newest first, each with its text, timestamp,
-duration, speed, and its own audio player, so you can compare what the model heard. Delete
-entries one at a time or clear the whole list.
+# The larger Wav2Vec2 model
+.\.venv\Scripts\python.exe transcribe.py "audio\sample1.flac" --model wav2vec2
+```
 
-### How it works
+Interactive mode keeps the chosen model in memory:
 
-* Recording uses the browser's `MediaRecorder`, which produces WebM/Opus audio; the server
-  decodes it through ffmpeg before transcription.
-* The model is loaded once on startup and reused, so each Send costs only inference time
-  (about 1–2 s for a short clip).
-* The page binds to `127.0.0.1` only — nothing on your network can reach it.
-* History and uploaded audio are stored locally: `history.json` and `web_uploads/`.
-  Both are git-ignored. The Amharic text is also written to `output/<id>.txt`.
+```powershell
+.\.venv\Scripts\python.exe transcribe.py --model wav2vec2
+```
+
+```text
+audio> audio\meeting.m4a
+...
+audio> q
+```
+
+### CLI options
+
+| Flag | Meaning |
+|---|---|
+| `-m, --model {shook,wav2vec2}` | Model to use (default: `shook`) |
+| `-o, --output PATH` | Write the transcript somewhere other than `output\<name>.txt` |
+| `-i, --interactive` | Force interactive mode |
+| `--json` | Also print the metrics as JSON |
+
+Default output names:
+
+* Shook Tiny: `output\<audio name>.txt`
+* Wav2Vec2: `output\<audio name>.wav2vec2.txt`
+
+Both are written as **UTF-8**, so Amharic (Ethiopic) characters stay intact.
+
+---
+
+## The web page
+
+### Model tabs
+
+A pill-tab selector at the top of the recorder switches between the two models.
+Each tab has its own status dot:
+
+* grey — not loaded yet; it loads when selected
+* amber — loading
+* green — ready
+* red — unavailable (the tooltip shows the error)
+
+The selected model is sent with the audio request, so the transcript and the
+history entry always say which model produced them.
+
+### Live microphone waveform
+
+While recording, the page draws a live waveform using the browser's Web Audio
+API:
+
+* the mic stream goes through an `AnalyserNode`
+* the canvas samples the time-domain signal about 60 times per second
+* quiet speech gives short bars; speaking close to the mic gives tall bars
+* the bars decay smoothly instead of flickering
+
+The waveform is a visual indicator only. It is not added to the recorded audio
+and does not affect transcription. If the browser cannot create an
+`AudioContext`, recording still works normally without the visualization.
+
+### Everything else
+
+* **New recording** tab — press the microphone, speak Amharic, press it again
+  to stop. Listen back, then press **Send**.
+* **File upload** — drop a WAV/MP3/M4A/FLAC/OGG/WEBM file on the box, or browse.
+* **Result card** — the Amharic text, the model badge, audio duration, processing
+  time, RTF and peak RAM, plus copy-to-clipboard.
+* **History** tab — every past transcription, newest first, with its model badge,
+  audio player and its own delete button. Filter with **All / Shook / Wav2Vec2**.
+* **Clear all** removes every history entry and its uploaded audio.
+
+The page binds to `127.0.0.1` only, so nothing on your network can reach it.
+History and uploaded audio stay local in `history.json` and `web_uploads/`; both
+are git-ignored.
 
 ### Environment variables
 
@@ -116,31 +150,150 @@ entries one at a time or clear the whole list.
 
 ---
 
-## Command line
+## How it works
 
-```text
-Loading Shook Tiny (Amharic, stage2-polish) from:
-  C:\...\models\shook-tiny-stage2
+### One engine, two models
 
-Model loaded in 0.88s (CPU, FP32)
+`transcribe.py` contains a small registry:
 
-Loading audio...
-Processing audio... (3.91s, ~1 chunk(s) of max 30s)
+* `MODEL_SPECS` describes each model: label, local folder, architecture,
+  chunk length and required files.
+* `load_model(model_key)` loads the matching Transformers class:
+  * `AutoModelForSpeechSeq2Seq` for Shook Tiny (Whisper)
+  * `AutoModelForCTC` for Wav2Vec2 XLSR
+* `transcribe_file(..., model_key=...)` returns the text plus timing and memory
+  metrics, and records which model produced it.
 
-Amharic transcription:
-መጠን ጠፋጭ በሆኑ መጠጦችና ምግቡ ጾምን ከመፍታት መቆጠብ
+Both models use the same audio pipeline:
 
-Saved to: C:\...\output\sample1.txt
-Performance: audio 3.91s | process 4.34s | RTF 1.108 | peak RSS 564 MB | CPU 364% of 8 threads
+* decode to **mono, 32-bit float, 16 kHz**
+* average stereo to mono
+* clean NaNs/infs
+* fall back to **ffmpeg** for containers libsndfile cannot open (notably
+  AAC-in-M4A)
+* split long audio into 30-second chunks, moving each cut to the quietest 50 ms
+  frame within ±0.75 s of the boundary and carrying a 0.5 s overlap
+* never silently truncate the end of a recording
+
+### Wav2Vec2 decoding detail
+
+The Wav2Vec2 tokenizer treats its word-delimiter token as a special token.
+Passing `skip_special_tokens=True` removes every space between Amharic
+morphemes. The engine therefore uses a plain `batch_decode()` for CTC output and
+keeps the model's natural spacing.
+
+### Offline operation
+
+`transcribe.py` and `app.py` set the offline switches **before** importing
+Transformers:
+
+```python
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
 ```
 
-A transcript is always written to `output\<audio name>.txt` as **UTF-8** so the Amharic
-(Ethiopic) characters stay intact. `RTF` is processing time divided by audio duration;
-below 1.0 means faster than playback.
+Models are loaded with `local_files_only=True` from:
+
+```text
+models\shook-tiny-stage2\
+models\wav2vec2-large-xlsr-53-amharic\
+```
+
+Neither folder is committed to Git (`.gitignore` excludes `models/`). Setup
+downloads them anonymously; inference never touches the network.
 
 ---
 
-## Installation (fresh machine)
+## Measured performance
+
+Measured on this machine — **Intel Core i7-8665U (4 cores / 8 threads), 16 GB RAM,
+no GPU**, Windows 10, Python 3.12.10, PyTorch 2.15.0+cpu, Transformers 5.22.2,
+FP32, greedy decoding.
+
+| Model | Audio | Duration | Processing | RTF | Peak RSS | CPU use |
+|---|---|---:|---:|---:|---:|---:|
+| Shook Tiny | `sample1.flac` | 3.91 s | 3.37 s | 0.860 | 572 MB | 320 % |
+| Shook Tiny | `sample2.flac` | 10.37 s | 7.42 s | 0.715 | 567 MB | 358 % |
+| Shook Tiny | `sample3.flac` | 27.49 s | 8.07 s | 0.293 | 570 MB | 354 % |
+| Wav2Vec2 XLSR | `sample1.flac` | 3.91 s | 1.96 s | 0.500 | 1604 MB | 352 % |
+| Wav2Vec2 XLSR | `sample2.flac` | 10.37 s | 5.85 s | 0.564 | 1455 MB | 342 % |
+| Wav2Vec2 XLSR | `sample3.flac` | 27.49 s | 16.84 s | 0.612 | 1442 MB | 333 % |
+
+`RTF` is processing time divided by audio duration; below `1.0` means faster
+than playback. Short clips have a fixed per-call overhead, so their RTF sits
+higher. Longer files benefit from chunking.
+
+A separate 37.87 s Wav2Vec2 run produced **RTF 0.418** and **1612 MB** peak RSS
+over two chunks.
+
+Model load time depends on disk cache: roughly **1–10 s** for Shook Tiny and
+**3–20 s** for Wav2Vec2 XLSR. The default model is loaded at server startup; the
+second one loads on first use and is kept in memory for the session. With both
+models loaded the process reached about **1.8 GB RSS**.
+
+Reproduce with:
+
+```powershell
+.\.venv\Scripts\python.exe benchmark.py
+.\.venv\Scripts\python.exe benchmark.py --models shook
+.\.venv\Scripts\python.exe benchmark.py --models wav2vec2
+```
+
+Results are written to `output\benchmark.json`. The runner reads the clip list in
+`audio\_references.json`; the clips themselves are not committed, so put your own
+files there (or edit the JSON) before running it.
+
+---
+
+## Sample output
+
+**sample1 — 3.91 s**
+
+```text
+REF: በጣም ጣፋጭ በሆኑ መጠጦችና ምግቦች ጾምን ከመፍታት መቆጠብ፤
+Shook Tiny: መጠን ጠፋጭ በሆኑ መጠጦችና ምግቡ ጾምን ከመፍጠት መቆጠብ
+Wav2Vec2:   በጣም ጣፏጭ በሆኑ መጠጦ ችና ምግብዎች ጾም ን ከ መፍታት መት ቆደብ
+```
+
+**sample2 — 10.37 s**
+
+```text
+REF: የኢኖቬሽንና ቴክኖሎጂ ሚኒስትር በለጠ ሞላ (ዶ/ር) እንደገለጹት፥ በዲጅታል ኢትዮጵያ 2025 ስትራቴጂ
+     ተጨባጭ ለውጥ ከመጣባቸው ዘርፎች ትራንስፖርትና ሎጂስቲክስ አንዱ ነው።
+Shook Tiny: ንቤሽና ቲክኖቨጂ ሚስቴር ዶክተር ምለጠሙላ እንደገለጹ ወዲህ ስተኔት ወዲህ ኢትዮጵያ
+     ምስጢራቴጂ ተጨሻጭ ለውጥህ ከመጣባቸው ዘርፎ ይትራንስፎርትና ሉቪስ ቲክስ አንዱ ነው
+Wav2Vec2:   ኑቬሽን ና ቴክኖሎጂ ሚኒስቴር ዶክተር በለጠ ሙላ እንደ ገለጹት በ ዲሽተር የ ኢትዮጵያ
+     ሀያ አምስት ትራቴጂ ተጨፋ ጭ ለውጥ ከ መጣ ባቸው ዘርፎች ትራንስፖርት ና ኦሎጂ ስቲክስ አንዱ ነው
+```
+
+Common Amharic words come through; errors cluster on proper nouns, loanwords and
+numbers. That is expected for models of this size.
+
+---
+
+## Audio support
+
+| Format | Status |
+|---|---|
+| WAV | works, including 44.1 kHz / stereo (resampled and mixed to mono) |
+| FLAC | works |
+| MP3 | works |
+| M4A (AAC) | works via ffmpeg |
+| OGG / OPUS / AAC / WMA | accepted; some containers need ffmpeg |
+
+`librosa`/`soundfile` decode WAV, FLAC, MP3 and OGG directly. AAC-in-M4A and
+similar containers are piped through **ffmpeg** automatically. If ffmpeg is
+missing, the error explains how to install it or convert the file.
+
+Long recordings are never truncated. Whisper's 30-second window is enforced per
+chunk; the Wav2Vec2 model uses the same chunker. Boundaries snap to quiet
+frames, overlap by 0.5 s within the budget, and the final chunk always reaches
+the end of the file.
+
+---
+
+## Installation on a fresh machine
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup.ps1
@@ -149,11 +302,11 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1
 `setup.ps1` is safe to re-run and will:
 
 1. Create `.venv` (Python 3.10+ required).
-2. Install **CPU-only** PyTorch from `https://download.pytorch.org/whl/cpu` (no CUDA wheels).
-3. Install the pinned dependencies.
-4. Download the model **anonymously** (no token, no login) into `models\shook-tiny-stage2\`,
-   skipping the download if the weights are already there.
-5. Verify the model loads with the network disabled.
+2. Install **CPU-only** PyTorch from `https://download.pytorch.org/whl/cpu`.
+3. Install the pinned dependencies (Transformers, librosa, Flask, etc.).
+4. Download **both** models anonymously into `models\`, skipping files that
+   already exist.
+5. Verify both models load with the network disabled.
 
 Manual equivalent:
 
@@ -163,156 +316,62 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
----
-
-## Audio support
-
-| Format | Status |
-|---|---|
-| WAV | works (also 44.1 kHz / stereo — resampled and mixed to mono) |
-| FLAC | works |
-| MP3 | works |
-| M4A (AAC) | works via ffmpeg |
-| OGG / OPUS / AAC / WMA | accepted; needs ffmpeg for the container formats libsndfile cannot open |
-
-Handling, in `load_audio()`:
-
-* Everything is decoded to **mono, 32-bit float, 16 kHz** — the rate the model expects.
-* Stereo is averaged to mono; NaNs/infs are cleaned.
-* Formats libsndfile cannot decode (notably AAC-in-M4A) are piped through **ffmpeg**
-  automatically. If ffmpeg is missing, you get a clear message telling you to install it
-  or convert to WAV/FLAC/MP3.
-
-### Long recordings are never truncated
-
-Whisper only "sees" 30 seconds at a time, and its feature extractor silently cuts anything
-longer. `split_chunks()` therefore:
-
-* hard-caps every chunk at exactly 30 s (480 000 samples);
-* moves each cut to the quietest 50 ms frame within ±0.75 s of the boundary, so words are
-  not sliced in half;
-* carries a 0.5 s overlap into the next chunk, taken out of the budget so the window is
-  still never exceeded;
-* always keeps the final chunk, so the end of the file is transcribed.
-
-Verified: a 113.6 s file becomes 4 chunks, is fully covered, and its last words appear in
-the output.
-
----
-
-## Offline operation
-
-No token, login, API key or paid service is used anywhere — the repository is public and
-`gated: false`, so `setup.ps1` downloads it anonymously with `token=False`.
-
-`transcribe.py` sets the offline switches **before** importing transformers, and loads the
-model from disk only:
-
-```python
-os.environ.setdefault("HF_HUB_OFFLINE", "1")
-os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
-os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
-...
-AutoProcessor.from_pretrained(model_dir, local_files_only=True)
-AutoModelForSpeechSeq2Seq.from_pretrained(model_dir, local_files_only=True, dtype=torch.float32)
-```
-
-Inference never touches the network. This was tested by pointing the Hub endpoint at an
-unreachable address (`HF_ENDPOINT=http://127.0.0.1:9`) with both offline flags set —
-transcription still succeeded.
-
-**Model location:** `models\shook-tiny-stage2\` — 146 MB total, 11 files
-(`model.safetensors` 144 MB, plus `config.json`, `preprocessor_config.json`,
-`generation_config.json`, `tokenizer_config.json`, `special_tokens_map.json`,
-`added_tokens.json`, `vocab.json`, `merges.txt`, `normalizer.json`).
-
----
-
-## Measured performance
-
-Measured on this machine — **Intel Core i7-8665U (4 cores / 8 threads), 16 GB RAM, no GPU**,
-Windows 10, Python 3.12.10, PyTorch 2.15.0+cpu, FP32, greedy decoding.
-
-Model load time: **0.68 – 1.22 s** (warm page cache).
-
-| Audio | Duration | Processing | RTF | Peak RSS | CPU use |
-|---|---|---|---|---|---|
-| `sample1.flac` | 3.91 s | 4.34 s | 1.108 | 564 MB | 364 % (≈3.6 of 8 threads) |
-| `sample2.flac` | 10.37 s | 10.48 s | 1.010 | 569 MB | 374 % |
-| `sample3.flac` | 27.49 s | 11.15 s | **0.406** | 570 MB | 366 % |
-| `long_test.wav` | 37.87 s | 25.08 s | **0.662** | 566 MB | 376 % |
-| `long_113s.wav` | 113.60 s | 63.91 s | **0.563** | 578 MB | 371 % |
-
-Short files have a fixed per-call overhead, so their RTF sits around or slightly above 1.
-From ~30 s upward it drops to ≈0.4–0.7 — comfortably faster than real time. Peak memory is
-flat at ~570 MB, so long files do not grow memory use.
-
-Reproduce with `python benchmark.py` (writes `output\benchmark.json`).
-
----
-
-## Sample transcription
-
-Reference (ground truth from the source dataset) versus what this model produced:
-
-**sample1 (3.91 s)**
-```text
-REF: በጣም ጣፋጭ በሆኑ መጠጦችና ምግቦች ጾምን ከመፍታት መቆጠብ፤
-HYP: መጠን ጠፋጭ በሆኑ መጠጦችና ምግቡ ጾምን ከመፍጠት መቆጠብ
-```
-
-**sample2 (10.37 s)**
-```text
-REF: የኢኖቬሽንና ቴክኖሎጂ ሚኒስትር በለጠ ሞላ (ዶ/ር) እንደገለጹት፥ በዲጅታል ኢትዮጵያ 2025 ስትራቴጂ ተጨባጭ ለውጥ ከመጣባቸው ዘርፎች ትራንስፖርትና ሎጂስቲክስ አንዱ ነው።
-HYP: ንቤሽና ቲክኖቨጂ ሚስቴር ዶክተር ምለጠሙላ እንደገለጹ ወዲህ ስተኔት ወዲህ ኢትዮጵያ ምስጢራቴጂ ተጨሻጭ ለውጥህ ከመጣባቸው ዘርፎ ይትራንስፎርትና ሉቪስ ቲክስ አንዱ ነው
-```
-
-Common Amharic words come through correctly; the errors cluster on proper nouns,
-loanwords and numbers — expected for a 37.8M-parameter model.
+Then download both model folders into `models\` as described above.
 
 ---
 
 ## Project layout
 
 ```text
-STT Amharic Shook Tiny/
+Amharic-Speech-to-Text/
 ├── models/
-│   └── shook-tiny-stage2/       # downloaded weights + tokenizer (git-ignored)
-├── audio/                       # your recordings / test clips
-├── output/                      # transcripts (.txt, UTF-8) + benchmark.json
+│   ├── shook-tiny-stage2/                  # Whisper Tiny, 146 MB (git-ignored)
+│   └── wav2vec2-large-xlsr-53-amharic/     # Wav2Vec2, 1.2 GB (git-ignored)
+├── audio/                                  # sample recordings (git-ignored)
+├── output/                                 # transcripts + benchmark.json (git-ignored)
 ├── web/
-│   ├── templates/index.html     # the page
-│   └── static/                  # style.css, app.js
-├── web_uploads/                 # audio sent from the browser (git-ignored)
-├── history.json                 # transcription history (git-ignored)
-├── transcribe.py                # the ASR engine (used by both CLI and web)
-├── app.py                       # local web server
-├── benchmark.py                 # reproduces the performance table
-├── start-web.ps1                # launches the web page
+│   ├── templates/index.html                # model tabs, recorder, history
+│   └── static/
+│       ├── style.css                       # design system + waveform styles
+│       └── app.js                          # recording, live wave, tabs, history
+├── web_uploads/                            # browser uploads (git-ignored)
+├── history.json                            # transcription history (git-ignored)
+├── transcribe.py                           # engine + model registry + CLI
+├── app.py                                  # local Flask web server
+├── benchmark.py                            # both-model benchmark runner
+├── setup.ps1                               # one-time setup
+├── start-web.ps1                           # starts the web page
 ├── requirements.txt
-├── setup.ps1
 ├── README.md
 └── .gitignore
 ```
 
-Model weights are in `.gitignore` and are never committed.
+Model weights are never committed.
 
 ---
 
 ## Limitations
 
-* **Amharic only.** The checkpoint is fine-tuned for `am`; other languages will not work well.
-* **Tiny model accuracy.** 37.8M parameters. Clear, close-mic speech transcribes well;
-  names, acronyms, numbers and noisy or overlapping speech degrade noticeably. Numbers are
-  often rendered as spoken words (e.g. `179` → `አንድ መቶ ሰባ ዘጠኝ`).
+* **Amharic only.** Both checkpoints are fine-tuned for `am`; other languages
+  will not work well.
+* **Tiny/small-model accuracy.** Clear, close-mic speech works best. Names,
+  acronyms, numbers and noisy or overlapping speech degrade noticeably.
+* **Wav2Vec2 spacing.** Its output is morpheme-segmented and contains extra
+  spaces inside words. That is the model's training convention, not a decoder
+  bug.
 * **No timestamps or speaker labels.** Plain text only.
-* **Long-file seam quality.** Chunks are cut at low-energy points and overlap by 0.5 s, but a
-  word landing exactly on a boundary can still be affected. Audio is never dropped.
-* **CPU speed.** Roughly 0.4–0.7× real time for longer files. Multi-threaded (≈4 threads
-  used). Very long recordings take correspondingly long, with no streaming output.
-* **FFmpeg for M4A.** AAC-in-M4A needs `ffmpeg` on `PATH`; WAV/FLAC/MP3 work without it.
-* **Numbers written in words.** No digit normalisation or inverse text normalisation.
-* **Punctuation** is only what the model emits — it is sparse and inconsistent.
+* **No digit normalization.** Numbers are usually rendered as spoken words
+  (for example `179` → `አንድ መቶ ሰባ ዘጠኝ`).
+* **Punctuation** is only what the model emits — sparse and inconsistent.
+* **Long-file seams.** Chunks are cut at low-energy points and overlap by 0.5 s,
+  but a word landing exactly on a boundary can still be affected. Audio is
+  never dropped.
+* **CPU speed.** Roughly 0.3–0.9× real time for longer files. Very long
+  recordings take correspondingly long, with no streaming output.
+* **Memory when both models are loaded.** About 1.8 GB RSS after both have been
+  used in the same server process.
+* **FFmpeg for M4A.** AAC-in-M4A needs `ffmpeg` on `PATH`; WAV/FLAC/MP3 work
+  without it.
 
 ---
 
@@ -321,9 +380,11 @@ Model weights are in `.gitignore` and are never committed.
 | Symptom | Fix |
 |---|---|
 | `Model directory not found` / incomplete | Run `setup.ps1` |
-| Amharic shows as `?` or boxes in the terminal | Use Windows Terminal or PowerShell; the script already forces UTF-8 output |
+| Amharic shows as `?` or boxes in the terminal | Use Windows Terminal or PowerShell; the scripts force UTF-8 output |
 | `.m4a` fails with “Format not recognised” | Install ffmpeg and make sure it is on `PATH` |
 | Microphone blocked in the browser | Allow mic permission for `127.0.0.1` in the address bar, or use the file upload box |
+| No waveform while recording | The browser may not support `AudioContext`; recording still works. Check the browser console. |
 | Port 5000 already in use | Start with another port: `$env:ASR_PORT=5001; .\start-web.ps1` |
 | `torch.cuda` errors | The venv must hold the CPU build: reinstall with the `--index-url https://download.pytorch.org/whl/cpu` flag |
-| Out of memory | Not expected (≈570 MB); close other heavy apps |
+| Wav2Vec2 tab takes a long time the first time | It is a 1.2 GB model loading from disk; later requests are fast |
+| Out of memory | Close other heavy apps. Using both models together needs about 2 GB free |

@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 """
-Local web UI for the Shook Tiny Amharic speech-to-text model.
+Local web UI for the two offline Amharic speech-to-text models.
 
 Run it and open the link it prints:
 
     .\\.venv\\Scripts\\python.exe app.py
 
 What you get in the browser
-  * record audio with the microphone (or upload a file)
+  * choose Shook Tiny or Wav2Vec2 XLSR with the model tabs
+  * record audio with a live microphone waveform, or upload a file
   * press Send to transcribe on the local CPU
   * a History tab with every past transcription, its text, and playable audio
 
@@ -56,26 +57,53 @@ app = Flask(
 app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024
 
 # ---------------------------------------------------------------------------
-# Model: loaded once, lazily, behind a lock. CPU inference is the bottleneck,
-# so serialising the load (and reuse afterwards) keeps things predictable.
+# Models: each one loads lazily, behind its own lock. CPU inference is the
+# bottleneck, so serialising each load keeps things predictable. The default
+# model is preloaded in main(); the second model loads when its tab is used.
 # ---------------------------------------------------------------------------
-_model_lock = threading.Lock()
-_state = {"processor": None, "model": None, "load_seconds": None, "error": None}
+_states = {
+    key: {"processor": None, "model": None, "load_seconds": None, "error": None}
+    for key in asr.MODEL_KEYS
+}
+_locks = {key: threading.Lock() for key in asr.MODEL_KEYS}
 
 
-def ensure_model():
-    with _model_lock:
-        if _state["model"] is not None:
-            return _state
-        if _state["error"] is not None:
-            raise RuntimeError(_state["error"])
+def ensure_model(model_key):
+    model_key, _spec = asr.resolve_model(model_key)
+    state = _states[model_key]
+    if state["model"] is not None:
+        return state
+    with _locks[model_key]:
+        if state["model"] is not None:
+            return state
+        if state["error"] is not None:
+            raise RuntimeError(state["error"])
         try:
-            processor, model, load_seconds = asr.load_model()
+            processor, model, load_seconds = asr.load_model(model_key)
         except Exception as exc:
-            _state["error"] = str(exc)
+            state["error"] = str(exc)
             raise
-        _state.update(processor=processor, model=model, load_seconds=load_seconds)
-        return _state
+        state.update(processor=processor, model=model, load_seconds=load_seconds)
+        return state
+
+
+def model_status(model_key):
+    model_key, spec = asr.resolve_model(model_key)
+    state = _states[model_key]
+    return {
+        "id": model_key,
+        "label": spec["label"],
+        "name": spec["name"],
+        "short": spec["short"],
+        "description": spec["description"],
+        "size": spec["size"],
+        "model_id": spec["model_id"],
+        "architecture": spec["architecture"],
+        "model_dir": str(spec["dir"]),
+        "ready": state["model"] is not None,
+        "load_seconds": state["load_seconds"],
+        "error": state["error"],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -84,12 +112,23 @@ def ensure_model():
 _history_lock = threading.Lock()
 
 
+def _normalise_item(item):
+    """Give older history entries a model id so the UI can label them."""
+    if not isinstance(item, dict):
+        return item
+    if item.get("model") not in asr.MODEL_KEYS:
+        item["model"] = asr.DEFAULT_MODEL
+    spec = asr.MODEL_SPECS[item["model"]]
+    item.setdefault("model_label", spec["label"])
+    return item
+
+
 def load_history():
     if not HISTORY_FILE.exists():
         return []
     try:
         data = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
+        return [_normalise_item(item) for item in data] if isinstance(data, list) else []
     except (json.JSONDecodeError, OSError):
         return []
 
@@ -130,23 +169,24 @@ def index():
 # ---------------------------------------------------------------------------
 @app.route("/api/status")
 def api_status():
-    info = {
-        "model": asr.MODEL_NAME,
-        "ready": _state["model"] is not None,
-        "load_seconds": _state["load_seconds"],
-        "error": _state["error"],
+    return jsonify({
+        "default_model": asr.DEFAULT_MODEL,
+        "models": [model_status(key) for key in asr.MODEL_KEYS],
         "sample_rate": asr.SAMPLE_RATE,
-        "chunk_seconds": asr.CHUNK_SECONDS,
-        "model_dir": str(asr.MODEL_DIR),
-    }
-    if not info["ready"] and _state["error"] is None:
-        try:
-            st = ensure_model()
-            info["ready"] = True
-            info["load_seconds"] = st["load_seconds"]
-        except Exception as exc:
-            info["error"] = str(exc)
-    return jsonify(info)
+    })
+
+
+@app.route("/api/models/<model_key>/load", methods=["POST"])
+def api_model_load(model_key):
+    try:
+        model_key, _spec = asr.resolve_model(model_key)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    try:
+        ensure_model(model_key)
+    except Exception as exc:
+        return jsonify({"error": f"Could not load the model: {exc}"}), 500
+    return jsonify(model_status(model_key))
 
 
 @app.route("/api/history")
@@ -194,7 +234,13 @@ def api_history_clear():
 
 @app.route("/api/transcribe", methods=["POST"])
 def api_transcribe():
-    """Transcribe an uploaded clip (from the recorder or a file picker)."""
+    """Transcribe an uploaded clip with the selected model."""
+    model_key = request.form.get("model", asr.DEFAULT_MODEL)
+    try:
+        model_key, spec = asr.resolve_model(model_key)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
     upload = request.files.get("audio")
     if upload is None or upload.filename == "":
         return jsonify({"error": "No audio was received."}), 400
@@ -213,13 +259,14 @@ def api_transcribe():
         return jsonify({"error": "The recording was empty. Please try again."}), 400
 
     try:
-        state = ensure_model()
+        state = ensure_model(model_key)
         result = asr.transcribe_file(
             stored_path,
             processor=state["processor"],
             model=state["model"],
             output_path=asr.OUTPUT_DIR / f"{entry_id}.txt",
             verbose=False,
+            model_key=model_key,
         )
     except Exception as exc:
         stored_path.unlink(missing_ok=True)
@@ -228,6 +275,8 @@ def api_transcribe():
     entry = {
         "id": entry_id,
         "text": result["text"],
+        "model": model_key,
+        "model_label": spec["label"],
         "audio_file": stored_name,
         "original_name": upload.filename,
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -261,19 +310,25 @@ def main():
         port = 5000
     url = f"http://127.0.0.1:{port}"
 
+    default_spec = asr.MODEL_SPECS[asr.DEFAULT_MODEL]
+    other_keys = [key for key in asr.MODEL_KEYS if key != asr.DEFAULT_MODEL]
+
     print("=" * 64)
     print("  Amharic Speech-to-Text  --  local web interface")
     print("=" * 64)
-    print(f"  Model : {asr.MODEL_NAME}")
-    print(f"  Folder: {asr.MODEL_DIR}")
+    print(f"  Default model : {default_spec['name']}")
+    print(f"  Model folder  : {asr.MODELS_DIR}")
+    for key in other_keys:
+        spec = asr.MODEL_SPECS[key]
+        print(f"  Also available: {spec['label']} (loads when selected)")
     print()
-    print("  Loading the model (first load takes a moment)...", flush=True)
+    print("  Loading the default model (first load takes a moment)...", flush=True)
 
     try:
-        state = ensure_model()
+        state = ensure_model(asr.DEFAULT_MODEL)
         print(f"  Ready in {state['load_seconds']:.2f}s  (CPU, FP32)", flush=True)
     except Exception as exc:
-        print(f"  WARNING: the model failed to load: {exc}", flush=True)
+        print(f"  WARNING: the default model failed to load: {exc}", flush=True)
         print("  The page still opens and will show this error.", flush=True)
 
     print()
