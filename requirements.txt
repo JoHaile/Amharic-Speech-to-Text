@@ -1,0 +1,24 @@
+# Shook Tiny Amharic ASR - dependencies
+#
+# IMPORTANT: PyTorch must be the CPU-only build. Install it from the PyTorch CPU
+# index FIRST, otherwise pip may pull the CUDA wheel (hundreds of MB) which this
+# machine cannot use:
+#
+#   pip install --index-url https://download.pytorch.org/whl/cpu torch==2.15.0+cpu
+#
+# setup.ps1 does this automatically. After that, the rest install from PyPI.
+#
+# Versions below are the exact ones this project was installed and tested with
+# on Windows 10 / Python 3.12 / Intel i7-8665U (no GPU).
+
+torch==2.15.0+cpu
+transformers==5.22.2
+huggingface_hub==2.4.0
+safetensors==0.8.0
+tokenizers==0.23.3
+soundfile==0.14.0
+librosa==1.0.0
+numpy==2.5.4
+scipy==1.18.1
+psutil==7.2.2
+flask==3.1.3

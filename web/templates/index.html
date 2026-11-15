@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Amharic Speech to Text</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">አ</div>
+      <div class="brand-text">
+        <h1>Amharic Speech&nbsp;to&nbsp;Text</h1>
+        <p class="brand-sub">Shook&nbsp;Tiny &middot; runs on this computer, offline</p>
+      </div>
+    </div>
+    <div class="status" id="status">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">Checking model…</span>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab is-active" id="tabNew" role="tab" aria-selected="true">
+      <span class="tab-label">New recording</span>
+      <span class="tab-am">አዲስ</span>
+    </button>
+    <button class="tab" id="tabHistory" role="tab" aria-selected="false">
+      <span class="tab-label">History</span>
+      <span class="tab-am">ታሪክ</span>
+      <span class="tab-count" id="historyCount" hidden>0</span>
+    </button>
+  </nav>
+
+  <main>
+    <!-- ================= NEW / RECORD PANE ================= -->
+    <section class="pane is-active" id="paneNew">
+
+      <div class="card recorder-card">
+        <p class="pane-hint" id="recHint">Press the microphone and start speaking in Amharic.</p>
+
+        <div class="rec-wrap">
+          <button class="rec-btn" id="recBtn" aria-label="Start recording">
+            <svg class="ico-mic" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 15a3.5 3.5 0 0 0 3.5-3.5V5a3.5 3.5 0 1 0-7 0v6.5A3.5 3.5 0 0 0 12 15Z"/>
+              <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5M9 21.5h6"/>
+            </svg>
+            <svg class="ico-stop" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="7" y="7" width="10" height="10" rx="2.2"/>
+            </svg>
+          </button>
+          <div class="rec-timer" id="recTimer">0:00</div>
+        </div>
+
+        <div class="rec-state" id="recState">Ready to record</div>
+
+        <div class="preview" id="preview" hidden>
+          <audio id="audioPreview" controls preload="metadata"></audio>
+          <div class="preview-actions">
+            <button class="btn btn-ghost" id="redoBtn">Record again</button>
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-send" id="sendBtn" disabled>
+          <span class="btn-label">Send</span>
+          <span class="spinner" hidden></span>
+        </button>
+
+        <div class="divider"><span>or</span></div>
+
+        <label class="drop" id="drop">
+          <input type="file" id="fileInput" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.opus,.webm,.aac,.wma" hidden>
+          <span class="drop-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4 16v2.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V16"/></svg>
+          </span>
+          <span class="drop-main">Drop an audio file here, or <b>browse</b></span>
+          <span class="drop-sub">WAV · MP3 · M4A · FLAC · OGG · WEBM</span>
+        </label>
+      </div>
+
+      <div class="card result-card" id="resultCard" hidden>
+        <div class="result-head">
+          <h2>Transcription</h2>
+          <button class="btn btn-ghost btn-sm" id="copyBtn">Copy</button>
+        </div>
+        <p class="result-text" id="resultText"></p>
+        <div class="result-meta" id="resultMeta"></div>
+      </div>
+
+    </section>
+
+    <!-- ================= HISTORY PANE ================= -->
+    <section class="pane" id="paneHistory">
+      <div class="history-head">
+        <h2 class="history-title">Your transcriptions</h2>
+        <button class="btn btn-ghost btn-sm" id="clearAllBtn" hidden>Clear all</button>
+      </div>
+
+      <div class="empty" id="historyEmpty">
+        <div class="empty-mark" aria-hidden="true">ታ</div>
+        <p class="empty-title">No transcriptions yet</p>
+        <p class="empty-sub">Record something in the New tab and it will appear here, along with the audio.</p>
+      </div>
+
+      <div class="history-list" id="historyList"></div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" hidden><span id="toastText"></span></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

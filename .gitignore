@@ -1,0 +1,35 @@
+# --- Model weights: never commit these (146 MB) ---
+models/
+!models/.gitkeep
+
+# --- Python virtual environment ---
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# --- Web UI state: uploaded audio + transcription history ---
+web_uploads/
+history.json
+history.json.tmp
+
+# --- Transcriptions ---
+output/
+
+# --- Audio files (test clips, conversions, recordings) ---
+audio/*.wav
+audio/*.mp3
+audio/*.m4a
+audio/*.flac
+audio/*.ogg
+audio/*.opus
+audio/*.aac
+audio/*.wma
+
+# --- Scratch / temporary datasets ---
+*.parquet
+_am_test.parquet
+_db.txt
+
+# --- Hugging Face download cache inside the model folder ---
+models/*/.cache
