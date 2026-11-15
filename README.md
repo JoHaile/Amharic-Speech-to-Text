@@ -126,6 +126,23 @@ The waveform is a visual indicator only. It is not added to the recorded audio
 and does not affect transcription. If the browser cannot create an
 `AudioContext`, recording still works normally without the visualization.
 
+### Recording preview and clip state
+
+When you stop recording, the clip stays on screen in a compact player above
+**Send**:
+
+* the browser capture is decoded and rewritten to a small 16-bit WAV copy, so the
+  player always has a real duration and plays even where the browser rejects
+  Opus/WebM;
+* play, pause, seek and the time display are drawn by the app itself, matching
+  the rest of the page — History uses the same player for every past clip;
+* the clip, its playback position and the result card are **kept when you switch
+  model tabs**. Switching only changes the model shown on the badge and in
+  *“Press Send to transcribe with …”*;
+* if a file format truly cannot be previewed (some rare uploads), the player says
+  *Preview unavailable* while **Send** still works, because the server decodes
+  with ffmpeg.
+
 ### Everything else
 
 * **New recording** tab — press the microphone, speak Amharic, press it again

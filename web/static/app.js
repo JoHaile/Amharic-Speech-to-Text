@@ -25,6 +25,7 @@
   const recHint = $("recHint");
   const preview = $("preview");
   const audioPreview = $("audioPreview");
+  const previewModel = $("previewModel");
   const redoBtn = $("redoBtn");
   const sendBtn = $("sendBtn");
   const sendLabel = sendBtn.querySelector(".btn-label");
@@ -67,12 +68,15 @@
   let mediaStream = null;
   let chunks = [];
   let pendingBlob = null;      // recorded or selected audio waiting to be sent
-  let pendingName = "recording.webm";
+  let pendingName = "recording.wav";
   let pendingSource = "recording";
+  let pendingDuration = 0;     // known length in seconds, when we have it
+  let previewUrl = null;       // object URL currently loaded in the preview player
   let timerId = null;
   let startedAt = 0;
   let isRecording = false;
   let isSending = false;
+  let captureId = 0;           // invalidates a slow capture preparation
 
   let historyItems = [];
   let historyFilterValue = "all";
@@ -106,6 +110,11 @@
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   };
 
+  const fmtPlayTime = (sec) => {
+    if (!Number.isFinite(sec) || sec < 0) return "0:00";
+    return fmtClock(sec);
+  };
+
   const fmtSecs = (v) => (v == null ? "—" : `${Number(v).toFixed(2)}s`);
 
   function fmtWhen(iso) {
@@ -126,6 +135,273 @@
 
   function isWav2Vec2(key) {
     return key === "wav2vec2";
+  }
+
+  // ---- audio player (shared by the preview and history) -------------------
+  const ICON_PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5.9v12.2L19 12z"/></svg>';
+  const ICON_PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7.4" y="5" width="3.5" height="14" rx="1.3"/><rect x="13.1" y="5" width="3.5" height="14" rx="1.3"/></svg>';
+
+  function createPlayer(host, options) {
+    const lazy = !!(options && options.lazy);
+    host.classList.add("player");
+    host.innerHTML = `
+      <button class="player-btn" type="button" aria-label="Play">
+        <span class="p-ico p-ico-play">${ICON_PLAY}</span>
+        <span class="p-ico p-ico-pause">${ICON_PAUSE}</span>
+      </button>
+      <div class="player-track" role="slider" tabindex="0" aria-label="Seek"
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <span class="player-fill"></span>
+        <span class="player-knob"></span>
+      </div>
+      <span class="player-time">0:00 / 0:00</span>
+      <audio preload="${lazy ? "none" : "metadata"}" hidden></audio>`;
+
+    const btn = host.querySelector(".player-btn");
+    const track = host.querySelector(".player-track");
+    const fill = host.querySelector(".player-fill");
+    const knob = host.querySelector(".player-knob");
+    const time = host.querySelector(".player-time");
+    const audio = host.querySelector("audio");
+
+    let knownDuration = 0;
+    let dragging = false;
+    let needsLoad = false;
+    let pendingRatio = null;
+
+    function ensureLoaded() {
+      if (lazy && needsLoad) {
+        needsLoad = false;
+        audio.load();
+      }
+    }
+
+    function totalDuration() {
+      const d = Number.isFinite(audio.duration) && audio.duration > 0
+        ? audio.duration : knownDuration;
+      return Number.isFinite(d) && d > 0 ? d : 0;
+    }
+
+    function paint() {
+      const d = totalDuration();
+      const raw = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+      const t = d > 0 ? Math.min(raw, d) : 0;
+      const pct = d > 0 ? Math.min(100, Math.max(0, (t / d) * 100)) : 0;
+      fill.style.width = pct + "%";
+      knob.style.left = pct + "%";
+      track.setAttribute("aria-valuenow", String(Math.round(pct)));
+      track.setAttribute("aria-valuetext", fmtPlayTime(t) + " of " + fmtPlayTime(d));
+      time.textContent = fmtPlayTime(t) + " / " + fmtPlayTime(d);
+    }
+
+    audio.addEventListener("loadedmetadata", () => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        knownDuration = audio.duration;
+      } else if (audio.duration === Infinity) {
+        // Some recorder streams report Infinity until they are seeked once.
+        const settle = () => {
+          audio.removeEventListener("timeupdate", settle);
+          try { audio.currentTime = 0; } catch (_) { /* ignore */ }
+          if (Number.isFinite(audio.duration)) knownDuration = audio.duration;
+          paint();
+        };
+        audio.addEventListener("timeupdate", settle);
+        try { audio.currentTime = 1e7; } catch (_) { /* ignore */ }
+      }
+      if (pendingRatio != null) {
+        const d = totalDuration();
+        if (d) { try { audio.currentTime = pendingRatio * d; } catch (_) { /* ignore */ } }
+        pendingRatio = null;
+      }
+      paint();
+    });
+
+    audio.addEventListener("durationchange", () => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        knownDuration = audio.duration;
+      }
+      paint();
+    });
+    audio.addEventListener("timeupdate", paint);
+
+    audio.addEventListener("play", () => {
+      host.classList.add("is-playing");
+      btn.setAttribute("aria-label", "Pause");
+    });
+    audio.addEventListener("pause", () => {
+      host.classList.remove("is-playing");
+      btn.setAttribute("aria-label", "Play");
+    });
+    audio.addEventListener("ended", () => {
+      host.classList.remove("is-playing");
+      btn.setAttribute("aria-label", "Play");
+      try { audio.currentTime = 0; } catch (_) { /* ignore */ }
+      paint();
+    });
+    audio.addEventListener("error", () => {
+      if (!audio.getAttribute("src")) return;
+      host.classList.add("is-error");
+      host.classList.remove("is-playing");
+      btn.disabled = true;
+      track.setAttribute("tabindex", "-1");
+      time.textContent = "Preview unavailable";
+    });
+
+    btn.addEventListener("click", async () => {
+      if (!audio.getAttribute("src")) return;
+      if (audio.paused) {
+        ensureLoaded();
+        try {
+          await audio.play();
+        } catch (_) {
+          showToast("This clip cannot be played here, but Send still works.", true);
+        }
+      } else {
+        audio.pause();
+      }
+    });
+
+    function seekToRatio(ratio) {
+      const d = totalDuration();
+      if (!d) return;
+      const clamped = Math.min(1, Math.max(0, ratio));
+      if (audio.readyState === 0) {
+        pendingRatio = clamped;
+        ensureLoaded();
+      } else {
+        try { audio.currentTime = clamped * d; } catch (_) { /* ignore */ }
+      }
+      paint();
+    }
+
+    function seekTo(clientX) {
+      const rect = track.getBoundingClientRect();
+      if (!rect.width || !totalDuration()) return;
+      seekToRatio((clientX - rect.left) / rect.width);
+    }
+
+    track.addEventListener("pointerdown", (e) => {
+      if (btn.disabled) return;
+      dragging = true;
+      try { track.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+      seekTo(e.clientX);
+    });
+    track.addEventListener("pointermove", (e) => {
+      if (dragging) seekTo(e.clientX);
+    });
+    const endDrag = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      try { track.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    };
+    track.addEventListener("pointerup", endDrag);
+    track.addEventListener("pointercancel", endDrag);
+
+    track.addEventListener("keydown", (e) => {
+      const d = totalDuration();
+      if (!d) return;
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        e.preventDefault();
+        const current = audio.readyState === 0 ? 0 : audio.currentTime;
+        const next = current + (e.key === "ArrowRight" ? 5 : -5);
+        seekToRatio(next / d);
+      } else if (e.key === "Home" || e.key === "End") {
+        e.preventDefault();
+        seekToRatio(e.key === "Home" ? 0 : 1);
+      } else if (e.key === " " || e.key === "Enter") {
+        e.preventDefault();
+        btn.click();
+      }
+    });
+
+    function setSource(url, durationSeconds) {
+      host.classList.remove("is-error", "is-playing");
+      btn.disabled = false;
+      btn.setAttribute("aria-label", "Play");
+      track.setAttribute("tabindex", "0");
+      knownDuration = Number.isFinite(durationSeconds) && durationSeconds > 0
+        ? durationSeconds : 0;
+      pendingRatio = null;
+      audio.src = url;
+      if (lazy) {
+        needsLoad = true;
+      } else {
+        audio.load();
+      }
+      paint();
+    }
+
+    function reset() {
+      host.classList.remove("is-error", "is-playing");
+      btn.disabled = false;
+      btn.setAttribute("aria-label", "Play");
+      track.setAttribute("tabindex", "0");
+      pendingRatio = null;
+      needsLoad = false;
+      try { audio.pause(); } catch (_) { /* ignore */ }
+      audio.removeAttribute("src");
+      audio.load();
+      knownDuration = 0;
+      paint();
+    }
+
+    paint();
+    return { audio, setSource, reset, paint };
+  }
+
+  // ---- turn a capture into a playable WAV ---------------------------------
+  function encodeWav(buffer) {
+    const channels = Math.max(1, buffer.numberOfChannels);
+    const frames = buffer.length;
+    const rate = buffer.sampleRate || 16000;
+    const dataBytes = frames * 2;
+    const out = new ArrayBuffer(44 + dataBytes);
+    const view = new DataView(out);
+    const write = (offset, text) => {
+      for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
+    };
+
+    write(0, "RIFF");
+    view.setUint32(4, 36 + dataBytes, true);
+    write(8, "WAVE");
+    write(12, "fmt ");
+    view.setUint32(16, 16, true);        // PCM chunk size
+    view.setUint16(20, 1, true);         // PCM
+    view.setUint16(22, 1, true);         // mono
+    view.setUint32(24, rate, true);
+    view.setUint32(28, rate * 2, true);  // byte rate
+    view.setUint16(32, 2, true);        // block align
+    view.setUint16(34, 16, true);        // bits per sample
+    write(36, "data");
+    view.setUint32(40, dataBytes, true);
+
+    const source = [];
+    for (let c = 0; c < channels; c++) source.push(buffer.getChannelData(c));
+    let offset = 44;
+    for (let i = 0; i < frames; i++) {
+      let sample = 0;
+      for (let c = 0; c < channels; c++) sample += source[c][i];
+      sample = Math.max(-1, Math.min(1, sample / channels));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+      offset += 2;
+    }
+    return new Blob([out], { type: "audio/wav" });
+  }
+
+  async function prepareCapture(blob) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    let ctx = null;
+    try {
+      ctx = new Ctx({ sampleRate: 16000 });
+      const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
+      const wav = encodeWav(decoded);
+      return wav.size > 44 ? { blob: wav, duration: decoded.duration } : null;
+    } catch (_) {
+      return null;
+    } finally {
+      if (ctx) { try { ctx.close(); } catch (_) { /* ignore */ } }
+    }
   }
 
   // ---- model status -------------------------------------------------------
@@ -273,8 +549,16 @@
       activeModel = key;
       updateModelTabs();
       updateStatusUI();
-      if (!isRecording) {
-        recHint.textContent = `Will transcribe with ${modelLabel(key)}. Press the microphone and speak Amharic.`;
+      // Switching models never touches the captured clip or the result card;
+      // it only changes which model the next Send will use.
+      if (!isRecording && !isSending) {
+        if (pendingBlob) {
+          updatePendingCopy();
+        } else if (!resultCard.hidden) {
+          recHint.textContent = `Next recording will use ${modelLabel(key)}.`;
+        } else {
+          recHint.textContent = `Will transcribe with ${modelLabel(key)}. Press the microphone and speak Amharic.`;
+        }
       }
       ensureModelLoaded(key).catch((err) => showToast(err.message || "Could not load the model.", true));
     });
@@ -409,6 +693,21 @@
   });
 
   // ---- preview / sending state -------------------------------------------
+  let previewPlayer = null;
+
+  // Keeps the pending clip and its labels in sync with the selected model.
+  function updatePendingCopy() {
+    if (!pendingBlob) return;
+    const kind = pendingSource === "upload" ? "File ready" : "Recording captured";
+    const length = pendingDuration > 0 ? ` (${fmtPlayTime(pendingDuration)})` : "";
+    recState.textContent =
+      `${kind}${length}. Press Send to transcribe with ${modelLabel(activeModel)}.`;
+    recHint.textContent = "Listen back, re-record if needed, then press Send.";
+    previewModel.textContent = modelLabel(activeModel);
+    previewModel.classList.toggle("is-wav2vec2", isWav2Vec2(activeModel));
+    previewModel.hidden = false;
+  }
+
   function setSending(on) {
     isSending = on;
     sendBtn.disabled = on || !pendingBlob;
@@ -420,25 +719,32 @@
   }
 
   function clearPending() {
+    captureId++;                 // drop any capture that is still being prepared
     pendingBlob = null;
     pendingSource = "recording";
-    if (audioPreview.src) {
-      URL.revokeObjectURL(audioPreview.src);
-      audioPreview.removeAttribute("src");
-      audioPreview.load();
+    pendingDuration = 0;
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      previewUrl = null;
     }
+    if (previewPlayer) previewPlayer.reset();
     preview.hidden = true;
+    previewModel.hidden = true;
     sendBtn.disabled = true;
   }
 
-  function setPending(blob, name, source, hint) {
+  function setPending(blob, name, source, duration) {
     pendingBlob = blob;
     pendingName = name;
     pendingSource = source;
-    audioPreview.src = URL.createObjectURL(blob);
+    pendingDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrl = URL.createObjectURL(blob);
+    if (!previewPlayer) previewPlayer = createPlayer(audioPreview);
+    previewPlayer.setSource(previewUrl, pendingDuration);
     preview.hidden = false;
     sendBtn.disabled = isSending || !blob;
-    if (hint) recState.textContent = hint;
+    updatePendingCopy();
   }
 
   // ---- recording ----------------------------------------------------------
@@ -515,21 +821,50 @@
     mediaRecorder.ondataavailable = (e) => {
       if (e.data && e.data.size > 0) chunks.push(e.data);
     };
-    mediaRecorder.onstop = () => {
+    mediaRecorder.onstop = async () => {
       const type = mediaRecorder.mimeType || mime || "audio/webm";
-      const blob = new Blob(chunks, { type });
-      if (blob.size === 0) {
+      const original = new Blob(chunks, { type });
+      if (original.size === 0) {
         showToast("Nothing was recorded. Try again and speak a little louder.", true);
         recState.textContent = "Ready to record";
+        recHint.textContent = "Press the microphone and start speaking in Amharic.";
         return;
       }
-      const ext = extForMime(type, "webm");
-      setPending(blob, `recording.${ext}`, "recording",
-        `Recording captured. Press Send to transcribe with ${modelLabel(activeModel)}.`);
-      recHint.textContent = "Listen back, re-record if needed, then press Send.";
+
+      recState.textContent = "Preparing the recording…";
+      recHint.textContent = "One moment — making a clip you can replay before sending.";
+      const id = ++captureId;
+
+      // Browser recordings are Opus in WebM/OGG, which some players refuse.
+      // A decoded WAV copy plays everywhere, seeks correctly and carries a real
+      // duration, so the preview always matches the clip that was just recorded.
+      const prepared = await prepareCapture(original);
+      if (id !== captureId) return;   // a newer capture or a reset won the race
+
+      if (prepared) {
+        setPending(prepared.blob, "recording.wav", "recording", prepared.duration);
+      } else {
+        setPending(original, `recording.${extForMime(type, "webm")}`, "recording", 0);
+      }
     };
 
-    mediaRecorder.start();
+    try {
+      mediaRecorder.start();
+    } catch (err) {
+      // A stream can refuse to record (device unplugged, track ended, codec
+      // unavailable). Release the microphone instead of leaving it open.
+      showToast(`Could not start recording: ${err.message || err}`, true);
+      stopWave();
+      if (mediaStream) {
+        mediaStream.getTracks().forEach((t) => t.stop());
+        mediaStream = null;
+      }
+      mediaRecorder = null;
+      recState.textContent = "Ready to record";
+      recHint.textContent = "Press the microphone and start speaking in Amharic.";
+      return;
+    }
+
     isRecording = true;
     recBtn.classList.add("is-recording");
     recBtn.setAttribute("aria-label", "Stop recording");
@@ -584,9 +919,7 @@
     clearPending();
     resultCard.hidden = true;
     resultModel.hidden = true;
-    setPending(file, file.name, "upload",
-      `Selected "${file.name}". Press Send to transcribe with ${modelLabel(activeModel)}.`);
-    recHint.textContent = "Check the preview, then press Send.";
+    setPending(file, file.name, "upload", 0);
   }
 
   fileInput.addEventListener("change", (e) => takeFile(e.target.files && e.target.files[0]));
@@ -760,11 +1093,13 @@
       bottom.className = "hist-bottom";
 
       if (it.audio_file) {
-        const audio = document.createElement("audio");
-        audio.controls = true;
-        audio.preload = "none";
-        audio.src = `/api/history/${encodeURIComponent(it.id)}/audio`;
-        bottom.append(audio);
+        const host = document.createElement("div");
+        host.className = "player player-compact";
+        bottom.append(host);
+        createPlayer(host, { lazy: true }).setSource(
+          `/api/history/${encodeURIComponent(it.id)}/audio`,
+          it.duration_s
+        );
       }
 
       const actions = document.createElement("div");
@@ -835,6 +1170,7 @@
   });
 
   // ---- boot ---------------------------------------------------------------
+  previewPlayer = createPlayer(audioPreview);
   drawIdleWave();
   loadStatus();
   loadHistory();

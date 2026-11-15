@@ -82,7 +82,11 @@
         <div class="rec-state" id="recState">Ready to record</div>
 
         <div class="preview" id="preview" hidden>
-          <audio id="audioPreview" controls preload="metadata"></audio>
+          <div class="preview-head">
+            <span class="preview-label">Ready to send</span>
+            <span class="model-badge" id="previewModel">Shook Tiny</span>
+          </div>
+          <div class="player" id="audioPreview"></div>
           <div class="preview-actions">
             <button class="btn btn-ghost" id="redoBtn">Record again</button>
           </div>
