@@ -619,12 +619,27 @@ main { max-width: 880px; margin: 0 auto; }
 }
 
 .result-text {
+  display: block;
+  width: 100%;
+  min-height: 96px;
   font-family: var(--amharic);
   font-size: 25px;
   line-height: 1.85;
   margin: 10px 0 16px;
+  padding: 14px 16px;
   word-break: break-word;
   white-space: pre-wrap;
+  color: var(--ink);
+  background: #f7f8fd;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  resize: vertical;
+  outline: none;
+}
+
+.result-text:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
 }
 
 .result-meta {

@@ -10,8 +10,10 @@
   // ---- elements -----------------------------------------------------------
   const tabNew = $("tabNew");
   const tabHistory = $("tabHistory");
+  const tabUpload = $("tabUpload");
   const paneNew = $("paneNew");
   const paneHistory = $("paneHistory");
+  const paneUpload = $("paneUpload");
 
   const modelTabs = Array.from(document.querySelectorAll(".model-tab"));
   const modelDots = {};
@@ -529,18 +531,22 @@
 
   // ---- tabs ---------------------------------------------------------------
   function showTab(which) {
-    const isNew = which === "new";
-    tabNew.classList.toggle("is-active", isNew);
-    tabHistory.classList.toggle("is-active", !isNew);
-    tabNew.setAttribute("aria-selected", String(isNew));
-    tabHistory.setAttribute("aria-selected", String(!isNew));
-    paneNew.classList.toggle("is-active", isNew);
-    paneHistory.classList.toggle("is-active", !isNew);
-    if (!isNew) loadHistory();
+    const tabs = { new: tabNew, history: tabHistory, upload: tabUpload };
+    const panes = { new: paneNew, history: paneHistory, upload: paneUpload };
+    Object.keys(tabs).forEach((key) => {
+      const active = key === which;
+      if (tabs[key]) {
+        tabs[key].classList.toggle("is-active", active);
+        tabs[key].setAttribute("aria-selected", String(active));
+      }
+      if (panes[key]) panes[key].classList.toggle("is-active", active);
+    });
+    if (which === "history") loadHistory();
   }
 
   tabNew.addEventListener("click", () => showTab("new"));
   tabHistory.addEventListener("click", () => showTab("history"));
+  if (tabUpload) tabUpload.addEventListener("click", () => showTab("upload"));
 
   // ---- model selection ----------------------------------------------------
   modelTabs.forEach((btn) => {
@@ -943,6 +949,7 @@
     resultCard.hidden = true;
     resultModel.hidden = true;
     setPending(file, file.name, "upload", 0);
+    showTab("new");
   }
 
   fileInput.addEventListener("change", (e) => takeFile(e.target.files && e.target.files[0]));
@@ -1009,7 +1016,9 @@
       const text = (data.text || "").trim();
       const doneKey = data.model || modelKey;
       const doneLabel = data.model_label || modelLabel(doneKey);
-      resultText.textContent = text || "(no speech detected)";
+      resultText.value = text || "(no speech detected)";
+      resultText.style.height = "auto";
+      resultText.style.height = Math.max(96, resultText.scrollHeight) + "px";
       resultMeta.innerHTML = metricsChips(data);
       resultModel.textContent = doneLabel;
       resultModel.classList.toggle("is-wav2vec2", isWav2Vec2(doneKey));
@@ -1037,19 +1046,20 @@
   sendBtn.addEventListener("click", send);
 
   copyBtn.addEventListener("click", async () => {
-    const text = resultText.textContent || "";
+    const text = (resultText.value || "").trim();
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
       showToast("Copied to clipboard.");
     } catch (_) {
-      const range = document.createRange();
-      range.selectNodeContents(resultText);
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
+      try { resultText.focus(); resultText.select(); } catch (_) { /* ignore */ }
       showToast("Selected — press Ctrl+C to copy.");
     }
+  });
+
+  resultText.addEventListener("input", () => {
+    resultText.style.height = "auto";
+    resultText.style.height = Math.max(96, resultText.scrollHeight) + "px";
   });
 
   // ---- history ------------------------------------------------------------

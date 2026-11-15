@@ -32,6 +32,10 @@
       <span class="tab-am">ታሪክ</span>
       <span class="tab-count" id="historyCount" hidden>0</span>
     </button>
+    <button class="tab" id="tabUpload" role="tab" aria-selected="false">
+      <span class="tab-label">Upload</span>
+      <span class="tab-am">ስቀል</span>
+    </button>
   </nav>
 
   <main>
@@ -97,17 +101,6 @@
           <span class="btn-label">Send</span>
           <span class="spinner" hidden></span>
         </button>
-
-        <div class="divider"><span>or</span></div>
-
-        <label class="drop" id="drop">
-          <input type="file" id="fileInput" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.opus,.webm,.aac,.wma" hidden>
-          <span class="drop-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4 16v2.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V16"/></svg>
-          </span>
-          <span class="drop-main">Drop an audio file here, or <b>browse</b></span>
-          <span class="drop-sub">WAV · MP3 · M4A · FLAC · OGG · WEBM</span>
-        </label>
       </div>
 
       <div class="card result-card" id="resultCard" hidden>
@@ -118,7 +111,7 @@
             <button class="btn btn-ghost btn-sm" id="copyBtn">Copy</button>
           </div>
         </div>
-        <p class="result-text" id="resultText"></p>
+        <textarea class="result-text" id="resultText" rows="4" spellcheck="false" aria-label="Transcription text"></textarea>
         <div class="result-meta" id="resultMeta"></div>
       </div>
 
@@ -145,6 +138,20 @@
       </div>
 
       <div class="history-list" id="historyList"></div>
+    </section>
+
+    <!-- ================= UPLOAD PANE ================= -->
+    <section class="pane" id="paneUpload">
+      <div class="card">
+        <label class="drop" id="drop">
+          <input type="file" id="fileInput" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.opus,.webm,.aac,.wma" hidden>
+          <span class="drop-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4 16v2.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V16"/></svg>
+          </span>
+          <span class="drop-main">Drop an audio file here, or <b>browse</b></span>
+          <span class="drop-sub">WAV · MP3 · M4A · FLAC · OGG · WEBM</span>
+        </label>
+      </div>
     </section>
   </main>
 
