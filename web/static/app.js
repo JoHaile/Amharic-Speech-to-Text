@@ -26,6 +26,8 @@
   const preview = $("preview");
   const audioPreview = $("audioPreview");
   const previewModel = $("previewModel");
+  const previewLabel = $("previewLabel");
+  const clearBtn = $("clearBtn");
   const redoBtn = $("redoBtn");
   const sendBtn = $("sendBtn");
   const sendLabel = sendBtn.querySelector(".btn-label");
@@ -698,11 +700,16 @@
   // Keeps the pending clip and its labels in sync with the selected model.
   function updatePendingCopy() {
     if (!pendingBlob) return;
+    const hasResult = !resultCard.hidden;
     const kind = pendingSource === "upload" ? "File ready" : "Recording captured";
     const length = pendingDuration > 0 ? ` (${fmtPlayTime(pendingDuration)})` : "";
-    recState.textContent =
-      `${kind}${length}. Press Send to transcribe with ${modelLabel(activeModel)}.`;
-    recHint.textContent = "Listen back, re-record if needed, then press Send.";
+    recState.textContent = hasResult
+      ? `Clip kept. Press Send to transcribe with ${modelLabel(activeModel)}.`
+      : `${kind}${length}. Press Send to transcribe with ${modelLabel(activeModel)}.`;
+    recHint.textContent = hasResult
+      ? "Switch model and press Send to compare, or record another."
+      : "Listen back, re-record if needed, then press Send.";
+    previewLabel.textContent = hasResult ? "Clip kept" : "Ready to send";
     previewModel.textContent = modelLabel(activeModel);
     previewModel.classList.toggle("is-wav2vec2", isWav2Vec2(activeModel));
     previewModel.hidden = false;
@@ -715,6 +722,8 @@
     sendLabel.textContent = on ? "Transcribing…" : "Send";
     recBtn.disabled = on;
     fileInput.disabled = on;
+    redoBtn.disabled = on;
+    clearBtn.disabled = on;
     modelTabs.forEach((btn) => { btn.disabled = on; });
   }
 
@@ -728,6 +737,7 @@
       previewUrl = null;
     }
     if (previewPlayer) previewPlayer.reset();
+    previewLabel.textContent = "Ready to send";
     preview.hidden = true;
     previewModel.hidden = true;
     sendBtn.disabled = true;
@@ -745,6 +755,16 @@
     preview.hidden = false;
     sendBtn.disabled = isSending || !blob;
     updatePendingCopy();
+  }
+
+  // Drops the clip (and its result) and returns the panel to its start state.
+  function resetToReady() {
+    clearPending();
+    resultCard.hidden = true;
+    resultModel.hidden = true;
+    recState.textContent = "Ready to record";
+    recHint.textContent = "Press the microphone and start speaking in Amharic.";
+    recTimer.textContent = "0:00";
   }
 
   // ---- recording ----------------------------------------------------------
@@ -904,12 +924,15 @@
   });
 
   redoBtn.addEventListener("click", () => {
-    clearPending();
-    resultCard.hidden = true;
-    resultModel.hidden = true;
-    recState.textContent = "Ready to record";
-    recHint.textContent = "Press the microphone and start speaking in Amharic.";
-    recTimer.textContent = "0:00";
+    if (isSending) return;
+    // startRecording clears the old clip only once the mic is actually ready,
+    // so a denied permission prompt does not throw the clip away.
+    startRecording();
+  });
+
+  clearBtn.addEventListener("click", () => {
+    if (isSending) return;
+    resetToReady();
   });
 
   // ---- file upload --------------------------------------------------------
@@ -984,17 +1007,23 @@
       if (!data) throw new Error("The server returned an unreadable reply.");
 
       const text = (data.text || "").trim();
+      const doneKey = data.model || modelKey;
+      const doneLabel = data.model_label || modelLabel(doneKey);
       resultText.textContent = text || "(no speech detected)";
       resultMeta.innerHTML = metricsChips(data);
-      resultModel.textContent = data.model_label || modelLabel(data.model || modelKey);
-      resultModel.classList.toggle("is-wav2vec2", isWav2Vec2(data.model || modelKey));
+      resultModel.textContent = doneLabel;
+      resultModel.classList.toggle("is-wav2vec2", isWav2Vec2(doneKey));
       resultModel.hidden = false;
       resultCard.hidden = false;
-      recState.textContent = `Done with ${modelLabel(data.model || modelKey)}. Transcription added to History.`;
-      recHint.textContent = "Press the microphone to record another, or open History.";
 
-      clearPending();
-      recTimer.textContent = "0:00";
+      // The clip is deliberately kept: the user can switch model tabs and
+      // press Send again to compare the same recording with the other model.
+      previewLabel.textContent = "Clip kept";
+      previewModel.textContent = doneLabel;
+      previewModel.classList.toggle("is-wav2vec2", isWav2Vec2(doneKey));
+      recState.textContent = `Done with ${doneLabel}. Clip kept — switch model and press Send to compare.`;
+      recHint.textContent = "The same recording can be sent again with the other model, or record another.";
+
       loadHistory();
       resultCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
     } catch (err) {

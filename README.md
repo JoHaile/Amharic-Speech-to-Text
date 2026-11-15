@@ -139,6 +139,11 @@ When you stop recording, the clip stays on screen in a compact player above
 * the clip, its playback position and the result card are **kept when you switch
   model tabs**. Switching only changes the model shown on the badge and in
   *“Press Send to transcribe with …”*;
+* the clip is also **kept after a transcription finishes**, so if the text is not
+  good you can switch to the other model and press **Send** again with the same
+  recording — each send adds its own History entry;
+* **Record again** starts a fresh recording; **Clear** drops the clip and its
+  result and returns the panel to *Ready to record*;
 * if a file format truly cannot be previewed (some rare uploads), the player says
   *Preview unavailable* while **Send** still works, because the server decodes
   with ffmpeg.
